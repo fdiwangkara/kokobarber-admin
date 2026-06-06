@@ -22,8 +22,7 @@
             <th>Telepon</th>
             <th>Peran</th>
             <th>Username</th>
-            <th>Jam Kerja</th>
-            <th>Status</th>
+            <th>Shift</th>
             <th>Rating</th>
             <th class="text-right">Aksi</th>
           </tr>
@@ -43,10 +42,11 @@
               <span v-else class="text-sm text-muted">-</span>
             </td>
             <td>
-              <span v-if="barber.workStart && barber.workEnd" class="text-sm">{{ barber.workStart }} - {{ barber.workEnd }}</span>
+              <span v-if="barber.shift" class="badge badge-shift">{{ barber.shift }}
+                <span class="text-sm text-muted" style="margin-left: 4px;">{{ getShiftHours(barber.shift) }}</span>
+              </span>
               <span v-else class="text-sm text-muted">Belum diatur</span>
             </td>
-            <td><span :class="'badge badge-' + barber.status.toLowerCase().replace(' ', '-')">{{ barber.status }}</span></td>
             <td>
               <span class="inline-flex">
                 <span class="stars">★</span> {{ barber.rating }}
@@ -84,32 +84,16 @@
             <option>Cashier</option>
           </select>
         </div>
-        <div class="form-group">
-          <label>Status</label>
-          <select v-model="form.status">
-            <option>Aktif</option>
-            <option>Tidak Aktif</option>
-          </select>
-        </div>
 
-        <!-- Jam Kerja (hanya untuk Barber) -->
+        <!-- Shift (hanya untuk Barber) -->
         <div class="work-hours-section" v-if="form.role === 'Barber'">
-          <div class="section-divider"><span>Jam Kerja</span></div>
-          <div class="grid-2-compact">
-            <div class="form-group">
-              <label>Jam Mulai</label>
-              <select v-model="form.workStart">
-                <option value="">-- Pilih --</option>
-                <option v-for="t in workHourOptions" :key="'s'+t" :value="t">{{ t }}</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Jam Selesai</label>
-              <select v-model="form.workEnd">
-                <option value="">-- Pilih --</option>
-                <option v-for="t in workHourOptions" :key="'e'+t" :value="t" :disabled="form.workStart && t <= form.workStart">{{ t }}</option>
-              </select>
-            </div>
+          <div class="section-divider"><span>Shift Kerja</span></div>
+          <div class="form-group">
+            <label>Pilih Shift</label>
+            <select v-model="form.shift">
+              <option value="">-- Pilih Shift --</option>
+              <option v-for="(info, name) in shifts" :key="name" :value="name">{{ name }} ({{ info.start }} - {{ info.end }})</option>
+            </select>
           </div>
           <p class="text-sm text-muted" style="margin-top: -6px;">Jika tidak diatur, barber dianggap tersedia sepanjang jam operasional.</p>
         </div>
@@ -152,7 +136,7 @@
 
 <script>
 import { Icon } from '@iconify/vue'
-import { store } from '../store.js'
+import { store, SHIFTS } from '../store.js'
 
 export default {
   components: { Icon },
@@ -162,16 +146,11 @@ export default {
       search: '',
       showModal: false,
       editing: null,
-      form: { name: '', phone: '', role: 'Barber', status: 'Aktif', username: '', password: '', workStart: '', workEnd: '' },
+      form: { name: '', phone: '', role: 'Barber', username: '', password: '', shift: '' },
       accountError: '',
       showDeleteConfirm: false,
       deleteTarget: null,
-      workHourOptions: [
-        '08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30',
-        '12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30',
-        '16:00','16:30','17:00','17:30','18:00','18:30','19:00','19:30',
-        '20:00','20:30','21:00','21:30','22:00',
-      ],
+      shifts: SHIFTS,
     }
   },
   computed: {
@@ -186,10 +165,10 @@ export default {
       this.accountError = ''
       if (barber) {
         this.editing = barber.id
-        this.form = { name: barber.name, phone: barber.phone, role: barber.role, status: barber.status, username: '', password: '', workStart: barber.workStart || '', workEnd: barber.workEnd || '' }
+        this.form = { name: barber.name, phone: barber.phone, role: barber.role, username: '', password: '', shift: barber.shift || '' }
       } else {
         this.editing = null
-        this.form = { name: '', phone: '', role: 'Barber', status: 'Aktif', username: '', password: '', workStart: '', workEnd: '' }
+        this.form = { name: '', phone: '', role: 'Barber', username: '', password: '', shift: '' }
       }
       this.showModal = true
     },
@@ -207,17 +186,16 @@ export default {
           b.name = this.form.name
           b.phone = this.form.phone
           b.role = this.form.role
-          b.status = this.form.status
-          b.workStart = this.form.workStart || ''
-          b.workEnd = this.form.workEnd || ''
+          b.status = 'Aktif'
+          b.shift = this.form.shift || ''
         }
       } else {
         const newId = store.barbers.length > 0 ? Math.max(...store.barbers.map(b => b.id)) + 1 : 1
         const initials = this.form.name.split(' ').map(s => s[0]).join('').toUpperCase().slice(0, 2)
         store.barbers.push({
-          id: newId, name: this.form.name, phone: this.form.phone, role: this.form.role, status: this.form.status,
+          id: newId, name: this.form.name, phone: this.form.phone, role: this.form.role, status: 'Aktif',
           rating: 0, totalReviews: 0, avatar: initials, available: true, username: this.form.username,
-          workStart: this.form.workStart || '', workEnd: this.form.workEnd || '',
+          shift: this.form.shift || '',
         })
       }
       this.showModal = false
@@ -229,6 +207,11 @@ export default {
       if (idx > -1) store.barbers.splice(idx, 1)
       this.showDeleteConfirm = false
     },
+    getShiftHours(shiftName) {
+      const shift = SHIFTS[shiftName]
+      if (!shift) return ''
+      return `(${shift.start} - ${shift.end})`
+    },
   },
 }
 </script>
@@ -237,4 +220,5 @@ export default {
 .section-divider { border-top: 1px solid var(--gray-200); padding-top: 14px; margin-top: 6px; margin-bottom: 14px; }
 .section-divider span { font-size: 0.6875rem; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.05em; }
 .grid-2-compact { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.badge-shift { background: #edf0ff; color: #3a4eb0; }
 </style>

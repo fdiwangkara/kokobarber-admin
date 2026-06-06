@@ -446,6 +446,11 @@ table {
   color: #b02a2a;
 }
 
+.badge-declined {
+  background: #fde8e8;
+  color: #b02a2a;
+}
+
 .badge-open {
   background: #e7f5ec;
   color: #1a7a3a;

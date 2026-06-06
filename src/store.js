@@ -1,11 +1,23 @@
 import { reactive } from 'vue'
 import { barbers as mockBarbers, services as mockServices, appointments as mockAppointments, reviews as mockReviews, roles as mockRoles, scheduleSlots as mockSchedule, members as mockMembers } from './data/mock.js'
 
+export const SHIFTS = {
+    'Pagi': { label: 'Pagi', start: '09:00', end: '14:00' },
+    'Siang': { label: 'Siang', start: '14:00', end: '19:00' },
+    'Sore': { label: 'Sore', start: '17:00', end: '21:00' },
+    'Full Day': { label: 'Full Day', start: '09:00', end: '21:00' },
+}
+
 export const store = reactive({
     isLoggedIn: false,
     currentUser: null,
     accounts: [
-        { username: 'admin', password: 'admin123', name: 'Admin Koko', role: 'Super Admin' },
+        { username: 'admin', password: 'admin123', name: 'Admin', role: 'Super Admin' },
+        { username: 'rizky', password: '1234', name: 'Rizky', role: 'Barber' },
+        { username: 'fajar', password: '1234', name: 'Fajar', role: 'Barber' },
+        { username: 'dimas', password: '1234', name: 'Dimas', role: 'Barber' },
+        { username: 'yoga', password: '1234', name: 'Yoga', role: 'Barber' },
+        { username: 'sari', password: '1234', name: 'Sari', role: 'Cashier' },
     ],
 
     barbers: [...mockBarbers.map(b => ({ ...b }))],
@@ -77,12 +89,19 @@ export const store = reactive({
         return timeStr <= this.nowTimeStr()
     },
 
-    // ===== Barber Working Hours =====
+    // ===== Barber Working Hours (Shift-based) =====
+    getBarberShiftHours(barberName) {
+        const barber = this.barbers.find(b => b.name === barberName)
+        if (!barber || !barber.shift) return null
+        return SHIFTS[barber.shift] || null
+    },
     isBarberWorkingAtTime(barberName, timeStr) {
         const barber = this.barbers.find(b => b.name === barberName)
         if (!barber) return false
-        if (!barber.workStart || !barber.workEnd) return true // No hours set = always available
-        return timeStr >= barber.workStart && timeStr < barber.workEnd
+        if (!barber.shift) return true // No shift set = always available
+        const shift = SHIFTS[barber.shift]
+        if (!shift) return true
+        return timeStr >= shift.start && timeStr < shift.end
     },
 
     // ===== Booking =====
@@ -122,6 +141,15 @@ export const store = reactive({
             apt.paymentMethod = method
             apt.receiptImage = receiptImage || null
             if (member) this.incrementMemberVisits(apt.customer)
+        }
+    },
+
+    declinePayment(id) {
+        const apt = this.appointments.find(a => a.id === id)
+        if (apt) {
+            apt.payment = 'Ditolak'
+            apt.paymentMethod = ''
+            apt.receiptImage = null
         }
     },
 
@@ -167,13 +195,31 @@ export const store = reactive({
         return [h, ...r].map(r => r.join(',')).join('\n')
     },
     exportBarbersCSV() {
-        const h = ['ID', 'Nama', 'Telepon', 'Peran', 'Status', 'Rating', 'Ulasan', 'Jam Mulai', 'Jam Selesai']
-        const r = this.barbers.map(b => [b.id, b.name, b.phone, b.role, b.status, b.rating, b.totalReviews, b.workStart || '-', b.workEnd || '-'])
+        const h = ['ID', 'Nama', 'Telepon', 'Peran', 'Rating', 'Ulasan', 'Shift']
+        const r = this.barbers.map(b => [b.id, b.name, b.phone, b.role, b.rating, b.totalReviews, b.shift || '-'])
         return [h, ...r].map(r => r.join(',')).join('\n')
     },
     exportReviewsCSV() {
         const h = ['ID', 'Pelanggan', 'Barber', 'Rating', 'Komentar', 'Tanggal']
         const r = this.reviews.map(r => [r.id, r.customer, r.barber, r.rating, `"${(r.comment || '').replace(/"/g, '""')}"`, r.date])
+        return [h, ...r].map(r => r.join(',')).join('\n')
+    },
+    isPaidCompleted(apt) {
+        return apt.status === 'Selesai' && apt.payment === 'Lunas'
+    },
+    needsPayment(apt) {
+        return apt.status === 'Selesai' && (apt.payment === 'Belum Bayar' || apt.payment === 'Ditolak')
+    },
+    getPaidTransactions() {
+        return this.appointments.filter(a => this.isPaidCompleted(a))
+    },
+    getPaymentQueue() {
+        return this.appointments.filter(a => this.needsPayment(a))
+    },
+
+    exportPaymentsCSV() {
+        const h = ['ID', 'Pelanggan', 'Barber', 'Layanan', 'Tanggal', 'Waktu', 'Harga', 'Diskon', 'Total', 'Metode']
+        const r = this.getPaidTransactions().map(a => [a.id, a.customer, a.barber, a.service, a.date, a.time, a.amount, a.discountAmount || 0, a.finalAmount || a.amount, a.paymentMethod || '-'])
         return [h, ...r].map(r => r.join(',')).join('\n')
     },
 })
